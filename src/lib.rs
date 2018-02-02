@@ -4,6 +4,7 @@
 #![feature(global_allocator)]
 #![feature(alloc)]
 
+#[macro_use]
 extern crate alloc;
 extern crate rlibc;
 extern crate wee_alloc;
@@ -13,17 +14,12 @@ use alloc::vec::Vec;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[no_mangle]
-#[lang = "panic_fmt"]
-pub extern "C" fn panic_fmt() -> ! {
-    unsafe {
-        core::intrinsics::abort();
-    }
-}
-
 enum Void {}
 
 extern "C" {
+    /// Print message to the console.
+    fn debug(msg_ptr: *const u8, msg_len: usize);
+
     /// External function which should load value from a key-value storage
     /// specified by the key (represented as `key_ptr` and `key_len`).
     /// 
@@ -38,6 +34,23 @@ extern "C" {
         cb: extern "C" fn(*mut Void, usize) -> *mut u8,
         cb_data: *mut Void,
     );
+}
+
+#[no_mangle]
+#[lang = "panic_fmt"]
+pub extern "C" fn panic_fmt(
+    args: ::core::fmt::Arguments,
+    file: &'static str,
+    line: u32,
+    col: u32,
+) -> ! {
+    use core::intrinsics;
+
+    let msg = format!("{}:{}:{}:{}", args, file, line, col);
+    unsafe {
+        debug(msg.as_ptr(), msg.len());
+        intrinsics::abort();
+    }
 }
 
 #[inline(always)]
@@ -90,4 +103,6 @@ fn load_storage(key: &[u8]) -> Vec<u8> {
 pub fn entrypoint() {
     let value = load_storage(b"hello");
     assert_eq!(&*value, b"world");
+
+    panic!("it worked!");
 }
